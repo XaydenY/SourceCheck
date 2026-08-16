@@ -16,7 +16,8 @@
 		IconFileText,
 		IconAlertTriangle,
 		IconWorld,
-		IconExclamationCircle
+		IconExclamationCircle,
+		IconX
 	} from '@tabler/icons-svelte-runes';
 
 	let activeTab = $state('check');
@@ -52,12 +53,23 @@
 		flaggedPhrases: []
 	}));
 
-	let history = $state([
-		{ name: 'schooluniformsdaily.com', date: 'Checked today, 2:14 PM', status: 'Mixed signals', level: 'moderate' },
-		{ name: 'dailypolicywatch.com', date: 'Checked yesterday, 4:02 PM', status: 'Low reliability', level: 'strong' },
-		{ name: 'regionalnewsdesk.org', date: 'Checked yesterday, 11:47 AM', status: 'Reliable', level: 'mild' },
-		{ name: 'civicbriefingtoday.com', date: 'Checked 3 days ago', status: 'Reliable', level: 'mild' }
-	]);
+	let history = $state(loadHistory());
+
+	/** Load persisted history from localStorage */
+	function loadHistory() {
+		try {
+			const raw = localStorage.getItem('sourcecheck-history');
+			if (raw) return JSON.parse(raw);
+		} catch { /* ignore corrupt data */ }
+		return [];
+	}
+
+	/** Save history to localStorage */
+	function saveHistory() {
+		try {
+			localStorage.setItem('sourcecheck-history', JSON.stringify(history));
+		} catch { /* storage full or unavailable */ }
+	}
 
 	/** Returns true if the input looks like a URL
 	 * @param {string} text
@@ -199,6 +211,15 @@
 				flaggedPhrases: []
 			};
 
+			// Add to history (newest first, max 50 entries)
+			const now = new Date();
+			const timeStr = now.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+			history = [
+				{ name: siteName, date: `Checked ${timeStr}`, status, level: statusLevel },
+				...history
+			].slice(0, 50);
+			saveHistory();
+
 			hasResult = true;
 		} catch (err) {
 			console.error('Bias check failed:', err);
@@ -235,6 +256,9 @@
 			<button onclick={runCheck} disabled={checking}>
 				<IconArrowRight size={16} stroke={1.75} style="vertical-align:-2px; margin-right:4px;" />
 				{checking ? 'Checking…' : 'Check'}
+			</button>
+			<button class="clear-btn" onclick={() => { inputText = ''; extractedText = ''; hasResult = false; extractError = null; }} title="Clear">
+				<IconX size={16} stroke={1.75} />
 			</button>
 		</div>
 
@@ -330,20 +354,27 @@
 	{/if}
 
 	{#if activeTab === 'history'}
-		<div class="card" style="margin-bottom: 0;">
-			{#each history as item}
-				<div class="history-row">
-					<div class="history-left">
-						<div class="history-icon"><IconFileText size={15} stroke={1.75} color="var(--text-secondary)" /></div>
-						<div style="min-width: 0;">
-							<p class="history-name">{item.name}</p>
-							<p class="history-date">{item.date}</p>
+		{#if history.length === 0}
+			<div class="card empty-state">
+				<IconHistory size={28} stroke={1.5} color="var(--text-muted)" />
+				<p>No checks yet. Run a check to see it here.</p>
+			</div>
+		{:else}
+			<div class="card" style="margin-bottom: 0;">
+				{#each history as item}
+					<div class="history-row">
+						<div class="history-left">
+							<div class="history-icon"><IconFileText size={15} stroke={1.75} color="var(--text-secondary)" /></div>
+							<div style="min-width: 0;">
+								<p class="history-name">{item.name}</p>
+								<p class="history-date">{item.date}</p>
+							</div>
 						</div>
+						<span class="history-badge {item.level}">{item.status}</span>
 					</div>
-					<span class="history-badge {item.level}">{item.status}</span>
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 
 	{#if activeTab === 'methodology'}
@@ -527,6 +558,13 @@
 	.search-row button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.clear-btn {
+		width: 36px;
+		padding: 0 !important;
+		justify-content: center;
+		flex-shrink: 0;
 	}
 
 	.progress-row {
